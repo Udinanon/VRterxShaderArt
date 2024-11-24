@@ -12,34 +12,38 @@ def clean_shader_code(shader_code):
     # Srip comments and whitespaces 
     re_remove = re.compile(r"\r| *//.*?$|/\*.*?\*/|^ +", re.DOTALL | re.MULTILINE)
     stripped_code, _ = re_remove.subn("", shader_code)
-    #print(fr"{stripped_code = }")
-    # Multiple emty lines or spaces, substitute to \n to keep it readable maybe
-    re_multispace = re.compile(r"( |\n){2,}")
+
+    # Multiple empty lines or spaces, substitute to \n to keep it readable maybe
+    re_multispace = re.compile(r"(\n\s*){3,}")
     shortened_code, _ = re_multispace.subn(r"\n", stripped_code)
-    # get tabs
-    re_tab = re.compile(br"\t")
 
-
+    # Fixing Defines
     # Find all #defines
     re_find_define = re.compile(r"(#define) (\w*)", re.IGNORECASE)
     defines = [x.group(2) for x in re_find_define.finditer(shortened_code)]
-    print(defines)
-
     # Substitute all occurences with a different name
     substituted_code = shortened_code
     for definition in defines:
         re_definition = re.compile(fr"\b{definition}\b")
         substituted_code, _ = re_definition.subn(f"custom{definition}", substituted_code)
 
+    # Fixing function overriding
+    # these regexes override all occurences of the functions, so we don0t use the built in methods at all
+    # this ensures better compatibility, but might cause a small loss of precision or performance
     substituted_code, _ = re.subn(r"mat4 transpose\s*\(", "mat4 OVERRIDDEN_transpose(", substituted_code)
-
     substituted_code, _ = re.subn(r"mat4 inverse\s*\(", "mat4 OVERRIDDEN_inverse(", substituted_code)
+    substituted_code, _ = re.subn(r"float round\(", "float OVERRIDDEN_round(", substituted_code)
+    substituted_code, _ = re.subn(r"float PI\s*=", "float OVERRIDDEN_PI =", substituted_code)
+
+
+
+    # remapping keywords between WebGL APIs and LOVR APIs
     pixel_code, _ = re.subn(r"texture2D\(", "getPixel(", substituted_code)
 
     # These are an idea but not perfect
     # Because while in GLSL the main is always at the end, this is not the case in WebGL
     # And we've aòredy seen the issue appear
-    main_code, _ = re.subn(r"void main\(", "vec4 lovrmain(", pixel_code)
+    main_code, _ = re.subn(r"void main\s*\(", "vec4 lovrmain(", pixel_code)
     ending_code, _ = re.subn(r"}\s*$", "\treturn Projection * View * Transform * gl_Position;\n}", main_code)
 
     return ending_code
@@ -60,10 +64,10 @@ def test_shader(counters, shader_code, index, store_shader = None):
         #print("Timed out, no probelm!")
     else:
         # print("stdout:", result.stdout)
+        error_text = result.stdout.splitlines()
         if "Could not parse vertex shader:" in result.stdout:
             print("SHADER ERROR")
             counters["shader_error"]+=1
-            error_text = result.stdout.splitlines()
             error_line = re.search(r"(?:\w+:.\d+:)(\d+):(.*)" , error_text[1])
             error_line_number = int(error_line.group(1))
             faulty_code =full_code.splitlines()[error_line_number-1]
@@ -77,7 +81,7 @@ def test_shader(counters, shader_code, index, store_shader = None):
         else:
             counters["other_error"]+=1
             with open("errors.log", "a") as log_handler:
-                log_handler.write(f"{index}, {error_message}, UNKOWN LINE\n")
+                log_handler.write(f"{index}, {error_text[0]}, UNKOWN LINE\n")
 
         print(result.stdout)
 
@@ -89,6 +93,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-index", help="select specific instance to test", type=int, default=-1)
     parser.add_argument("--all", help="force testing of all indices, not skipping successes", action="store_true")
+    parser.add_argument("--errlog", type=str, help="select error log file for indexes to test")
 
     return parser.parse_args()
 
@@ -100,6 +105,10 @@ def generate_test_ids(parser, shaders):
             print("Invalid shader index selected")
             quit()
         test_idxs = [parser.index]
+    elif parser.errlog:
+        with open(parser.errlog, "r") as errlog_handler:
+            errnums = [int(line.split(",")[0]) for line in errlog_handler.readlines()]
+        return errnums
     else:
         with open("success.log", "r") as reader:
             success_data = reader.readlines()
