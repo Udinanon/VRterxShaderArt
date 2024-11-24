@@ -3,7 +3,7 @@ local vertex_art = {}
 
 vertex_art.FFT = require("fft")
 
-json = require("json")
+-- json = require("json")
 pprint = require("pprint")
 ---TODO:
 -- Fix issues with soud data
@@ -18,8 +18,8 @@ function vertex_art:prepare_shader(shader_filename)
     
     pprint.pprint(lovr.filesystem.getDirectoryItems(
     "./vertex_art/art/"))
-    shader_code = json.decode(lovr.filesystem.read(
-        "./vertex_art/art/2AAPaBjMMEbZF3peq/art.json"))["settings"]["shader"]
+    -- shader_code = json.decode(lovr.filesystem.read(
+        -- "./vertex_art/art/2AAPaBjMMEbZF3peq/art.json"))["settings"]["shader"]
     print(shader_code)
     -- remmeber to escape ( in the match strings but not in the substitute strings!
     shader_code = shader_code:gsub("#define PI", "// #define PI") -- Pi is already defined\
