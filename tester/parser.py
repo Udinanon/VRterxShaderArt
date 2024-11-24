@@ -14,13 +14,14 @@ def clean_shader_code(shader_code):
     stripped_code, _ = re_remove.subn("", shader_code)
 
     # Multiple empty lines or spaces, substitute to \n to keep it readable maybe
-    re_multispace = re.compile(r"(\n\s*){3,}")
+    re_multispace = re.compile(r"(\n\s*){2,}")
     shortened_code, _ = re_multispace.subn(r"\n", stripped_code)
 
     # Fixing Defines
     # Find all #defines
-    re_find_define = re.compile(r"(#define) (\w*)", re.IGNORECASE)
+    re_find_define = re.compile(r"(#define)\s+(\w*)", re.IGNORECASE)
     defines = [x.group(2) for x in re_find_define.finditer(shortened_code)]
+    #print(defines)
     # Substitute all occurences with a different name
     substituted_code = shortened_code
     for definition in defines:
@@ -35,18 +36,45 @@ def clean_shader_code(shader_code):
     substituted_code, _ = re.subn(r"float round\(", "float OVERRIDDEN_round(", substituted_code)
     substituted_code, _ = re.subn(r"float PI\s*=", "float OVERRIDDEN_PI =", substituted_code)
 
-
-
     # remapping keywords between WebGL APIs and LOVR APIs
     pixel_code, _ = re.subn(r"texture2D\(", "getPixel(", substituted_code)
 
-    # These are an idea but not perfect
-    # Because while in GLSL the main is always at the end, this is not the case in WebGL
-    # And we've aòredy seen the issue appear
-    main_code, _ = re.subn(r"void main\s*\(", "vec4 lovrmain(", pixel_code)
-    ending_code, _ = re.subn(r"}\s*$", "\treturn Projection * View * Transform * gl_Position;\n}", main_code)
-
-    return ending_code
+    # Fixing Main 
+    # Locate main code block
+    main_definition_location = re.search(r"void(\s)+main\s*\((\w|\s)*\)(\s|\n)*{", pixel_code)
+    #print(pixel_code)
+    print(main_definition_location)
+    # find block end
+    # regex can't count sadly
+    parenthesis_counter = 1
+    line_number = 0
+    for symbol in pixel_code[main_definition_location.end():]:
+        line_number +=1
+        if symbol == "{":
+            parenthesis_counter += 1
+        elif symbol == "}":
+            parenthesis_counter -= 1
+        if parenthesis_counter < 1:
+            break
+    # print(f"START: {main_definition_location.end()}")
+    # print(f"END: {main_definition_location.end()+line_number}")
+    
+    # now extract and process
+    main_code_block = pixel_code[main_definition_location.end():main_definition_location.end()+line_number]
+    #print(main_code_block)
+    # Detect and plug unsemicolon-ed lines
+    # detecs if a line ends with a } and a character not from teh first group, with no ; in the middle
+    main_code_block, _ = re.subn(r"(?<=[^;\n\s}{}])(?<!;)(\s|\n)*}", ";\n}", main_code_block)
+    # substitue al empty returns
+    main_code_block, _ = re.subn(r"return;", "return Projection * View * Transform * gl_Position;", main_code_block)
+    # ensure code block returns
+    main_code_block, _ = re.subn(r"}(\n|\s)*$", "return Projection * View * Transform * gl_Position;\n}", main_code_block)
+    # paste it back in
+    end_code  = pixel_code[:main_definition_location.end()] + main_code_block + pixel_code[main_definition_location.end()+line_number:]
+    # move to the appropriate lovrmain
+    end_code, _ = re.subn(r"void(\s)+main\s*\((\s)*\)(\s|\n)*{", "vec4 lovrmain(){", end_code)
+    
+    return end_code
 
 def test_shader(counters, shader_code, index, store_shader = None):
     with open("header.vert", "r") as header_handler:
@@ -64,11 +92,11 @@ def test_shader(counters, shader_code, index, store_shader = None):
         #print("Timed out, no probelm!")
     else:
         # print("stdout:", result.stdout)
-        error_text = result.stdout.splitlines()
+
         if "Could not parse vertex shader:" in result.stdout:
             print("SHADER ERROR")
             counters["shader_error"]+=1
-            error_line = re.search(r"(?:\w+:.\d+:)(\d+):(.*)" , error_text[1])
+            error_line = re.search(r"(?:ERROR:.\d+:)(\d+):(.*)" , result.stdout)
             error_line_number = int(error_line.group(1))
             faulty_code =full_code.splitlines()[error_line_number-1]
             error_message = error_line.group(2)
@@ -80,6 +108,7 @@ def test_shader(counters, shader_code, index, store_shader = None):
                 log_handler.write(f"{index}, {error_message}, LINE: {error_line_number}, {faulty_code}\n")
         else:
             counters["other_error"]+=1
+            error_text = result.stdout.splitlines()
             with open("errors.log", "a") as log_handler:
                 log_handler.write(f"{index}, {error_text[0]}, UNKOWN LINE\n")
 
