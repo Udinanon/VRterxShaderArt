@@ -2,8 +2,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
-import random
-
+import argparse
 class DefaultDict(dict):
     def __missing__(self, key):
         return 0
@@ -30,9 +29,11 @@ def clean_shader_code(shader_code):
     substituted_code = shortened_code
     for definition in defines:
         re_definition = re.compile(fr"\b{definition}\b")
-        substituted_code, _ = re_definition.subn(f"custom_{definition}", substituted_code)
+        substituted_code, _ = re_definition.subn(f"custom{definition}", substituted_code)
 
-    re.sub(r"mat\d transpose\(", "void none(", substituted_code)
+    substituted_code, _ = re.subn(r"mat4 transpose\s*\(", "mat4 OVERRIDDEN_transpose(", substituted_code)
+
+    substituted_code, _ = re.subn(r"mat4 inverse\s*\(", "mat4 OVERRIDDEN_inverse(", substituted_code)
     pixel_code, _ = re.subn(r"texture2D\(", "getPixel(", substituted_code)
 
     # These are an idea but not perfect
@@ -75,6 +76,8 @@ def test_shader(counters, shader_code, index, store_shader = None):
                 log_handler.write(f"{index}, {error_message}, LINE: {error_line_number}, {faulty_code}\n")
         else:
             counters["other_error"]+=1
+            with open("errors.log", "a") as log_handler:
+                log_handler.write(f"{index}, {error_message}, UNKOWN LINE\n")
 
         print(result.stdout)
 
@@ -82,7 +85,30 @@ def test_shader(counters, shader_code, index, store_shader = None):
         #print("stderr:", result.stderr)
     return counters
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-index", help="select specific instance to test", type=int, default=-1)
+    parser.add_argument("--all", help="force testing of all indices, not skipping successes", action="store_true")
+
+    return parser.parse_args()
+
+def generate_test_ids(parser, shaders):
+    if parser.all:
+        test_idxs = range(len(shaders))
+    elif parser.index >-1:
+        if parser.index > len(shaders):
+            print("Invalid shader index selected")
+            quit()
+        test_idxs = [parser.index]
+    else:
+        with open("success.log", "r") as reader:
+            success_data = reader.readlines()
+        success_idxs = [int(x) for x in success_data]
+        test_idxs = [x for x in range(len(shaders)) if x not in success_idxs]    
+    return test_idxs
+
 def main():
+    parser = parse_args()
     shaders_folder = Path("/home/udinanon/Programming/Projects/LOVR/VertexShaderArt/vertexshaderart.com/art")
     shaders = [x for x in shaders_folder.iterdir() if x.is_dir()]
     counters = DefaultDict({
@@ -90,23 +116,20 @@ def main():
         "shader_error":0,
         "other_error":0
     })
-    for index in range(len(shaders)):
-#    for index in range(100): #len(shaders)):
-    # index = random.randint(0, len(shaders))
-    # index = 212
+    test_idxs = generate_test_ids(parser, shaders)
+    for index in test_idxs:
         shader_code = json.loads((shaders[index] / "art.json").read_bytes() )["settings"]["shader"]
         print(f"{index =}")
         print(f"PATH: {(shaders[index] / "art.json")}")
         print(f"LINK: http://127.0.0.1:8000/art/{shaders[index].parts[-1]}")
 
-
         #print(fr"{shader_code =}")
+        with open("in.vert", "w") as file_writer:
+            file_writer.writelines(shader_code)
         cleaned_shader_code = clean_shader_code(shader_code)
         #save_shader(cleaned_shader_code)
         counters = test_shader(counters, cleaned_shader_code, index)
     print(counters)
 if __name__=="__main__":
-    main()
 
-   # [2024-11-21 20:30:59] result 
-    #{'success': 1702, 'shader_error': 684, 'other_error': 4, 'overload_precision_error': 500, 'unprocessed_main': 61}
+    main()
