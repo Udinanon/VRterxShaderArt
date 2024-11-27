@@ -28,6 +28,17 @@ def clean_shader_code(shader_code):
         re_definition = re.compile(fr"\b{definition}\b")
         substituted_code, _ = re_definition.subn(f"custom{definition}", substituted_code)
 
+    # Fixing struct names
+    # Find all structs
+    re_find_define = re.compile(r"(struct)\s+(\w*)", re.IGNORECASE)
+    structs = [x.group(2) for x in re_find_define.finditer(substituted_code)]
+    #print(defines)
+    # Substitute all occurences with a different name
+    for struct in structs:
+        re_struct = re.compile(fr"\b{struct}\b")
+        substituted_code, _ = re_struct .subn(f"custom{struct}", substituted_code)
+
+
     # Fixing function overriding
     # these regexes override all occurences of the functions, so we don0t use the built in methods at all
     # this ensures better compatibility, but might cause a small loss of precision or performance
@@ -39,6 +50,13 @@ def clean_shader_code(shader_code):
     # remapping keywords between WebGL APIs and LOVR APIs
     pixel_code, _ = re.subn(r"texture2D\(", "getPixel(", substituted_code)
 
+    # Remove added uniforms, attrubutes and varyings
+    #  these could never do anything afaik and are just ignored in WebGL i guess
+    # the shaders don0t seem to work even in the original environment, these might just be broken and WebGL isn0t strict enough to notice
+    pixel_code, _ = re.subn(r"^uniform.*$\n", "", pixel_code, flags=re.MULTILINE)
+    pixel_code, _ = re.subn(r"^varying.*$\n", "", pixel_code, flags=re.MULTILINE)
+    pixel_code, _ = re.subn(r"^attribute.*$\n", "", pixel_code, flags=re.MULTILINE)
+    
     # Fixing Main 
     # Locate main code block
     main_definition_location = re.search(r"void(\s)+main\s*\((\w|\s)*\)(\s|\n)*{", pixel_code)
@@ -159,7 +177,7 @@ def main():
         shader_code = json.loads((shaders[index] / "art.json").read_bytes() )["settings"]["shader"]
         print(f"{index =}")
         print(f"PATH: {(shaders[index] / "art.json")}")
-        print(f"LINK: http://127.0.0.1:8000/art/{shaders[index].parts[-1]}")
+        print(f"LINK: http://127.0.0.1:8000/vertexshaderart.com/art/{shaders[index].parts[-1]}")
 
         #print(fr"{shader_code =}")
         with open("in.vert", "w") as file_writer:
