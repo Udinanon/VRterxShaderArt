@@ -46,6 +46,9 @@ def clean_shader_code(shader_code):
     substituted_code, _ = re.subn(r"mat4 inverse\s*\(", "mat4 OVERRIDDEN_inverse(", substituted_code)
     substituted_code, _ = re.subn(r"float round\(", "float OVERRIDDEN_round(", substituted_code)
     substituted_code, _ = re.subn(r"float PI\s*=", "float OVERRIDDEN_PI =", substituted_code)
+    substituted_code, _ = re.subn(r"gl_PointSize", "PointSize", substituted_code)
+    
+    
 
     # remapping keywords between WebGL APIs and LOVR APIs
     pixel_code, _ = re.subn(r"texture2D\(", "getPixel(", substituted_code)
@@ -138,6 +141,8 @@ def test_shader(counters, shader_code, index, store_shader = None):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-o", action="store_true", help="Load from in.vert file instead of reading an ID")
+    parser.add_argument("-id", type=str, help="Unique id of the shader, can be found in URL", default = "")
     parser.add_argument("-index", help="select specific instance to test", type=int, default=-1)
     parser.add_argument("--all", help="force testing of all indices, not skipping successes", action="store_true")
     parser.add_argument("--errlog", type=str, help="select error log file for indexes to test")
@@ -175,6 +180,14 @@ def main():
     test_idxs = generate_test_ids(parser, shaders)
     for index in test_idxs:
         shader_code = json.loads((shaders[index] / "art.json").read_bytes() )["settings"]["shader"]
+        if len(parser.id):
+            selected_shader = [shader for shader in shaders if parser.id in shader.name][0]
+            shader_code = json.loads((selected_shader / "art.json").read_bytes() )["settings"]["shader"]
+        if parser.o:
+            with open("in.vert", "r") as file_reader:
+                shader_code = file_reader.read()
+
+        logger.debug(f"{index =}")
         print(f"{index =}")
         print(f"PATH: {(shaders[index] / "art.json")}")
         print(f"LINK: http://127.0.0.1:8000/vertexshaderart.com/art/{shaders[index].parts[-1]}")
