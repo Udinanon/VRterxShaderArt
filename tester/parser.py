@@ -98,7 +98,7 @@ def clean_shader_code(shader_code):
     
     return end_code
 
-def test_shader(counters, shader_code, index, store_shader = None):
+def test_shader(counters, shader_code, index, store_shader = None, timeout = True):
     with open("header.vert", "r") as header_handler:
         header_code = header_handler.read()
     full_code = "\n".join([header_code, shader_code]) 
@@ -108,7 +108,10 @@ def test_shader(counters, shader_code, index, store_shader = None):
         with open(f"{index}.txt", "w+") as file_handler:
             file_handler.writelines(full_code)
     try:
-        result = subprocess.run(["../../binaries/lovr-v0.17.1-x86_64.AppImage",  "./"], capture_output=True,  text=True, timeout=3)
+        if timeout:
+            result = subprocess.run(["../../binaries/lovr-v0.17.1-x86_64.AppImage",  "./"], capture_output=True,  text=True, timeout=15)
+        else: 
+            result = subprocess.run(["../../binaries/lovr-v0.17.1-x86_64.AppImage",  "./"], capture_output=True,  text=True)
     except subprocess.TimeoutExpired:
         counters["success"]+=1
         #print("Timed out, no probelm!")
@@ -179,6 +182,7 @@ def main():
         "other_error":0
     })
     test_idxs = generate_test_ids(parser, shaders)
+    testing_mode = (len(parser.id) == 0) and (parser.index == -1) and not parser.o
     for index in test_idxs:
         shader_code = json.loads((shaders[index] / "art.json").read_bytes() )["settings"]["shader"]
         if len(parser.id):
@@ -198,7 +202,8 @@ def main():
             file_writer.writelines(shader_code)
         cleaned_shader_code = clean_shader_code(shader_code)
         #save_shader(cleaned_shader_code)
-        counters = test_shader(counters, cleaned_shader_code, index)
+        counters = test_shader(counters, cleaned_shader_code, index, 
+        timeout = testing_mode)
     print(counters)
 if __name__=="__main__":
 
