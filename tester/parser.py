@@ -62,7 +62,8 @@ def clean_shader_code(shader_code):
     
     # Fixing Main 
     # Locate main code block
-    main_definition_location = re.search(r"void(\s)+main\s*\((\w|\s)*\)(\s|\n)*{", pixel_code)
+    main_re = re.compile(r"void(\s)+main\s*\((\w|\s)*\)(\s|\n)*{")
+    main_definition_location = main_re.search(pixel_code)
     #print(pixel_code)
     print(main_definition_location)
     # find block end
@@ -93,7 +94,7 @@ def clean_shader_code(shader_code):
     # paste it back in
     end_code  = pixel_code[:main_definition_location.end()] + main_code_block + pixel_code[main_definition_location.end()+line_number:]
     # move to the appropriate lovrmain
-    end_code, _ = re.subn(r"void(\s)+main\s*\((\s)*\)(\s|\n)*{", "vec4 lovrmain(){", end_code)
+    end_code, _ = main_re.subn("vec4 lovrmain(){", end_code)
     
     return end_code
 
